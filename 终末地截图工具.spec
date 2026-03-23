@@ -1,5 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
+import sys
+import os
 
+block_cipher = None
 
 a = Analysis(
     ['auto_screenshot.py'],
@@ -7,29 +10,57 @@ a = Analysis(
     binaries=[],
     datas=[],
     hiddenimports=[
+        'PIL._tkinter_finder',
         'pyautogui',
         'pygetwindow',
-        'PIL',
-        'PIL.Image',
         'keyboard',
-        'pywintypes',
-        'win32api',
-        'win32con',
-        'win32gui',
+        'PIL.Image',
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['PyQt5', 'pygame', 'cv2', 'matplotlib', 'scipy', 'pandas'],
-    noarchive=True,
-    optimize=1,
+    excludes=[
+        'PyQt5',
+        'PyQt6',
+        'PySide2',
+        'PySide6',
+        'cv2',
+        'numpy',
+        'pandas',
+        'scipy',
+        'matplotlib',
+        'IPython',
+        'jupyter',
+        'notebook',
+        'sphinx',
+        'pytest',
+        'test',
+        'tests',
+        'email',
+        'html',
+        'xml',
+        'xmlrpc',
+        'multiprocessing',
+        'sqlite3',
+        'tkinter.test',
+        'pydoc',
+        'distutils',
+        'setuptools',
+        'pkg_resources',
+    ],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
 )
-pyz = PYZ(a.pure)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
     pyz,
     a.scripts,
     a.binaries,
+    a.zipfiles,
     a.datas,
     [],
     name='终末地截图工具',
@@ -45,4 +76,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    uac_admin=True,
 )
