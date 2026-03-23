@@ -21,8 +21,8 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=['PyQt5', 'pygame', 'cv2', 'matplotlib', 'scipy', 'pandas'],
-    noarchive=False,
-    optimize=0,
+    noarchive=True,
+    optimize=1,
 )
 pyz = PYZ(a.pure)
 
@@ -39,7 +39,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
