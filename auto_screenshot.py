@@ -22,7 +22,7 @@ DEFAULT_CONFIG = {
     "drag_margin": 40,                    # 拖拽操作距离窗口边缘的像素距离
     "drag_duration": 0.08,                # 拖拽动作持续时间(秒)
     "output_folder": os.path.join(os.path.dirname(__file__), "screenshots"), # 输出目录
-    "hotkeys": {"start": "F1", "stop": "F2", "exit": "esc", "manual": "F3"}   # 快捷键配置
+    "hotkeys": {"start": "F1", "stop": "F2", "exit": "F4", "manual": "F3"}   # 快捷键配置
 }
 
 PRESET_REGIONS = {
