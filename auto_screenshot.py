@@ -28,6 +28,11 @@ CONFIG = {
     "output_folder": os.path.join(get_base_path(), "screenshots"),  # 截图输出目录
 }
 
+RESOLUTION_CONFIG = {
+    "1280x720": {"factor": 0.7}, "1600x900": {"factor": 0.56}, "1920x1080": {"factor": 0.47},
+    "自定义": {"factor": None},
+}
+
 PRESET_REGIONS = {
     "武陵-武陵城": (14, 8), "武陵-景玉谷": (10, 6), "谷地-枢纽区": (13, 7),
     "谷地-谷地通道": (9, 5), "谷地-供能高地": (9, 5), "谷地-源石研究园": (9, 5),
@@ -42,6 +47,13 @@ class GameScreenshotTool:
         self.screenshots = []
         self.game_window = None
         self.grid_size = []
+        self.resolution = "1280x720"
+        self.factor = RESOLUTION_CONFIG[self.resolution]["factor"]
+
+    def set_resolution(self, resolution):
+        if resolution in RESOLUTION_CONFIG:
+            self.resolution = resolution
+            self.factor = RESOLUTION_CONFIG[resolution]["factor"]
 
     def log(self, msg):
         if self.log_callback:
@@ -82,7 +94,7 @@ class GameScreenshotTool:
     def move_camera(self, direction):
         if not self.game_window:
             return
-        window, margin, factor = self.game_window, self.drag_margin, 0.7
+        window, margin, factor = self.game_window, self.drag_margin, self.factor
         moves = {
             'right': (window.left + int(window.width * factor) + margin, window.top + margin, 
                       window.left + margin, window.top + margin),
@@ -205,7 +217,7 @@ class GameScreenshotTool:
 class ScreenshotGUI:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("终末地截图工具v0.2.0")
+        self.root.title("终末地截图工具v0.3.0")
         self.root.geometry("520x460")
         self.root.resizable(False, False)
         self.tool = GameScreenshotTool(log_callback=self.append_log)
@@ -216,7 +228,7 @@ class ScreenshotGUI:
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
-        ttk.Label(main_frame, text="终末地截图工具v0.2.0", font=("Microsoft YaHei", 14, "bold")).pack(pady=(0, 10))
+        ttk.Label(main_frame, text="终末地截图工具v0.3.0", font=("Microsoft YaHei", 14, "bold")).pack(pady=(0, 10))
         
         region_frame = ttk.LabelFrame(main_frame, text="截图区域", padding="5")
         region_frame.pack(fill=tk.X, pady=1)
@@ -244,18 +256,30 @@ class ScreenshotGUI:
         for text, cmd in btns:
             ttk.Button(btn_frame, text=text, command=cmd, width=13).pack(side=tk.LEFT, padx=5)
         
-        config_frame = ttk.LabelFrame(main_frame, text="配置信息", padding="2")
+        config_frame = ttk.LabelFrame(main_frame, text="配置信息", padding="5")
         config_frame.pack(fill=tk.X, pady=1)
-        ttk.Label(config_frame, text=f"截图区域: {self.tool.capture_region[0]*100:.0f}% x {self.tool.capture_region[1]*100:.0f}%  |  "
-                                     f"重叠率: {self.tool.overlap[0]*100:.1f}% x {self.tool.overlap[1]*100:.1f}%").pack(padx=0)
-        ttk.Label(config_frame, text=f"输出目录: {self.tool.output_folder}").pack(padx=0)
+        
+        config_row = ttk.Frame(config_frame)
+        config_row.pack(fill=tk.X)
+        ttk.Label(config_row, text="分辨率:").pack(side=tk.LEFT)
+        self.resolution_var = tk.StringVar(value=self.tool.resolution)
+        self.resolution_combo = ttk.Combobox(config_row, textvariable=self.resolution_var,
+                                              values=list(RESOLUTION_CONFIG.keys()), state="readonly", width=16)
+        self.resolution_combo.pack(side=tk.LEFT, padx=5)
+        self.resolution_combo.bind("<<ComboboxSelected>>", self.on_resolution_change)
+        ttk.Label(config_row, text="Factor:").pack(side=tk.LEFT, padx=(10, 0))
+        self.factor_entry = ttk.Entry(config_row, width=6, state=tk.DISABLED)
+        self.factor_entry.pack(side=tk.LEFT, padx=5)
+        ttk.Label(config_row, text="%").pack(side=tk.LEFT)
+        self.update_factor_display()
+        ttk.Label(config_row, text=f"重叠率: {self.tool.overlap[0]*100:.1f}% x {self.tool.overlap[1]*100:.1f}%").pack(side=tk.LEFT, padx=(15, 0))
         
         log_frame = ttk.LabelFrame(main_frame, text="日志", padding="5")
         log_frame.pack(fill=tk.BOTH, expand=True, pady=5)
         self.log_text = scrolledtext.ScrolledText(log_frame, height=8, width=50, state=tk.DISABLED)
         self.log_text.pack(fill=tk.BOTH, expand=True)
         
-        ttk.Label(main_frame, text="提示: 请将游戏设为1280x720窗口，进入俯瞰批量选择模式使用", 
+        ttk.Label(main_frame, text="仅支持16：9窗口模式，于配置信息中选择对应分辨率，进入俯瞰批量选择模式使用", 
                   foreground="gray").pack(pady=1)
 
     def on_region_change(self, event=None):
@@ -268,6 +292,23 @@ class ScreenshotGUI:
             self.cols_entry.delete(0, tk.END)
         else:
             self.update_grid_display()
+
+    def on_resolution_change(self, event=None):
+        resolution = self.resolution_var.get()
+        is_custom = resolution == "自定义"
+        self.factor_entry.config(state=tk.NORMAL if is_custom else tk.DISABLED)
+        if is_custom:
+            self.factor_entry.delete(0, tk.END)
+            self.factor_entry.insert(0, f"{int(self.tool.factor * 100)}")
+        else:
+            self.tool.set_resolution(resolution)
+            self.update_factor_display()
+
+    def update_factor_display(self):
+        self.factor_entry.config(state=tk.NORMAL)
+        self.factor_entry.delete(0, tk.END)
+        self.factor_entry.insert(0, f"{int(self.tool.factor * 100)}")
+        self.factor_entry.config(state=tk.DISABLED)
 
     def update_grid_display(self):
         region = self.region_var.get()
@@ -300,6 +341,17 @@ class ScreenshotGUI:
                     return messagebox.showerror("错误", "行列数最大为99")
             except ValueError:
                 return messagebox.showerror("错误", "请输入有效的数字")
+        
+        resolution = self.resolution_var.get()
+        if resolution == "自定义":
+            try:
+                custom_factor = int(self.factor_entry.get())
+                if custom_factor <= 0 or custom_factor > 100:
+                    return messagebox.showerror("错误", "Factor必须在1到100之间")
+                self.tool.factor = custom_factor / 100
+            except ValueError:
+                return messagebox.showerror("错误", "请输入有效的Factor数值")
+        
         self.tool.start_capture(region, custom_rows, custom_cols)
 
     def stop_capture(self):
@@ -328,7 +380,8 @@ class ScreenshotGUI:
             sys.exit(0)
         hide_console()
         self.on_region_change()
-        for msg in ["=" * 45, "程序已启动", "=" * 45, "使用说明：",
+        for msg in ["=" * 45, "程序已启动", f"输出目录: {self.tool.output_folder}",  "=" * 45,
+                    "使用说明：",
                     "1. 若使用预设，将画面缩到最小并移到左上角，选择截图地区后点击按钮或F1开始",
                     "2. 自定义则输入行数和列数后点击按钮或F1开始", "3. 可点击F3截取单张画面",
                     "=" * 45]:
