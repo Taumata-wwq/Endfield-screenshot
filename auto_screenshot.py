@@ -6,6 +6,9 @@ import random
 import pyautogui
 import pygetwindow as gw
 from PIL import Image
+import base64
+import io
+from PIL import ImageTk
 import keyboard
 import threading
 from datetime import datetime
@@ -17,10 +20,16 @@ def get_base_path():
     return os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__)
 
 
+ICON_DATA = "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"
+
+def get_embedded_icon():
+    img = Image.open(io.BytesIO(base64.b64decode(ICON_DATA)))
+    return ImageTk.PhotoImage(img)
+
+
 HWND_TOPMOST = -1
 SWP_NOSIZE = 0x0001
 SWP_NOMOVE = 0x0002
-SET_WINDOW_POS_FLAGS = SWP_NOSIZE | SWP_NOMOVE
 RAND_DELAY_MIN = 0.9
 RAND_DELAY_MAX = 1.1
 
@@ -29,9 +38,12 @@ CONFIG = {
     "stabilize_delay": 0.05,           # 拖拽后等待画面稳定的时间(秒)
     "screenshot_delay": 0.01,          # 截图前的等待时间(秒)
     "capture_region": 0.62,            # 截图区域比例（相对于窗口宽高）
-    "capture_offset_y": 0.02,          # 截图区域垂直偏移（正数向下）
+    "capture_offset_y": 0.03,          # 截图区域垂直偏移（正数向下）
     "drag_margin": 40,                 # 拖拽操作距离窗口边缘的像素距离
     "drag_duration": 0.01,             # 拖拽动作持续时间(秒)
+    "base_window_size": (1600, 900),   # 基准窗口尺寸（宽, 高）
+    "drag_adjust_h": 1,                # 水平方向每增加160像素，拖拽距离减少的像素数
+    "drag_adjust_v": 2,                # 竖直方向每增加90像素，拖拽距离减少的像素数
     "output_folder": os.path.join(get_base_path(), "screenshots"),  # 截图输出目录
 }
 
@@ -183,7 +195,7 @@ class GameScreenshotTool:
         if self.game_window:
             self.game_window.activate()
             ctypes.windll.user32.SetWindowPos(
-                self.game_window._hWnd, HWND_TOPMOST, 0, 0, 0, 0, SET_WINDOW_POS_FLAGS
+                self.game_window._hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE
             )
             time.sleep(1.5)
         return bool(self.game_window)
@@ -218,13 +230,9 @@ class GameScreenshotTool:
         
         self.log("拖拽画面刷新...")
         pyautogui.moveTo(end_x, end_y, duration=0.1)
-        time.sleep(0.01)
         pyautogui.mouseDown(button='middle')
-        time.sleep(0.01)
         pyautogui.moveTo(start_x, start_y, duration=0.3)
-        time.sleep(0.01)
         pyautogui.moveTo(end_x, end_y, duration=0.3)
-        time.sleep(0.01)
         pyautogui.mouseUp(button='middle')
         time.sleep(0.05)
         
@@ -245,6 +253,11 @@ class GameScreenshotTool:
             return
         win, margin = self.game_window, self.drag_margin
         dx, dy = self.drag_distance
+        base_w, base_h = self.base_window_size
+        adjust_x = ((win.width - base_w) // 160) * self.drag_adjust_h
+        adjust_y = ((win.height - base_h) // 90) * self.drag_adjust_v
+        dx = max(1, dx - adjust_x)
+        dy = max(1, dy - adjust_y)
         base_x, base_y = win.left + margin, win.top + margin
         drag_x, drag_y = win.left + dx + margin, win.top + dy + margin
         
@@ -262,8 +275,7 @@ class GameScreenshotTool:
         pyautogui.moveTo(end_x, end_y, duration=self.drag_duration)
         time.sleep(self.rand_delay(0.1))
         pyautogui.mouseUp(button='middle')
-        time.sleep(self.rand_delay(0.1))
-        time.sleep(self.rand_delay(self.stabilize_delay))
+        time.sleep(self.rand_delay(0.1 + self.stabilize_delay))
 
     def auto_capture_grid(self):
         self.log("开始自动截图...")
@@ -385,15 +397,18 @@ class GameScreenshotTool:
 
 
 class ScreenshotGUI:
-    VERSION = "v1.0.0"
+    VERSION = "v1.1.0"
+    AUTHOR = "b站@Taumata°"
     WINDOW_TITLE = "终末地截图工具"
     WINDOW_SIZE = "520x470"
     
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title(f"{self.WINDOW_TITLE}{self.VERSION}")
+        self.root.title(f"{self.WINDOW_TITLE}{self.VERSION} - {self.AUTHOR}")
         self.root.geometry(self.WINDOW_SIZE)
         self.root.resizable(False, False)
+        self.icon_photo = get_embedded_icon()
+        self.root.iconphoto(True, self.icon_photo)
         self.tool = GameScreenshotTool(log_callback=self.append_log)
         self.setup_ui()
         self.setup_hotkeys()
@@ -573,16 +588,17 @@ class ScreenshotGUI:
             self.update_capture_region_display()
             self.update_grid_display()
 
+    def _get_current_region(self):
+        return self.region_var.get() if hasattr(self, 'region_var') else REGIONS[0]
+
     def update_drag_display(self, keep_editable=False):
-        region = self.region_var.get() if hasattr(self, 'region_var') else REGIONS[0]
-        drag = self.tool._get_drag_distance(region)
+        drag = self.tool._get_drag_distance(self._get_current_region())
         dx, dy = drag or (0, 0)
         self._update_entry(self.drag_x_entry, dx, keep_editable=keep_editable)
         self._update_entry(self.drag_y_entry, dy, keep_editable=keep_editable)
 
     def update_overlap_display(self):
-        region = self.region_var.get() if hasattr(self, 'region_var') else REGIONS[0]
-        overlap_x, overlap_y = self.tool._get_overlap(region)
+        overlap_x, overlap_y = self.tool._get_overlap(self._get_current_region())
         self._update_entry(self.overlap_x_entry, f"{overlap_x * 100:.1f}")
         self._update_entry(self.overlap_y_entry, f"{overlap_y * 100:.1f}")
 
