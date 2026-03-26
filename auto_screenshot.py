@@ -3,17 +3,19 @@ import sys
 import os
 import time
 import random
-import pyautogui
-import pygetwindow as gw
-from PIL import Image
 import base64
 import io
-from PIL import ImageTk
-import keyboard
 import threading
 from datetime import datetime
+
+import pyautogui
+import pygetwindow as gw
+import keyboard
+from PIL import Image, ImageTk
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
+
+ctypes.windll.shcore.SetProcessDpiAwareness(2)
 
 
 def get_base_path():
@@ -32,19 +34,30 @@ SWP_NOSIZE = 0x0001
 SWP_NOMOVE = 0x0002
 RAND_DELAY_MIN = 0.9
 RAND_DELAY_MAX = 1.1
+SCROLL_STEP = 120
+
+
+class RECT(ctypes.Structure):
+    _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long), ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+
+def get_client_rect(hwnd):
+    rect = RECT()
+    ctypes.windll.user32.GetClientRect(hwnd, ctypes.byref(rect))
+    return rect.right - rect.left, rect.bottom - rect.top
 
 
 CONFIG = {
     "stabilize_delay": 0.05,           # 拖拽后等待画面稳定的时间(秒)
     "screenshot_delay": 0.01,          # 截图前的等待时间(秒)
-    "capture_region": 0.62,            # 截图区域比例（相对于窗口宽高）
+    "capture_region_x": 0.626,         # 截图区域水平比例（相对于窗口宽度）
+    "capture_region_y": 0.648,         # 截图区域垂直比例（相对于窗口高度）
     "capture_offset_y": 0.03,          # 截图区域垂直偏移（正数向下）
-    "drag_margin": 40,                 # 拖拽操作距离窗口边缘的像素距离
+    "drag_margin": 2,                  # 拖拽操作距离窗口边缘的像素距离
     "drag_duration": 0.01,             # 拖拽动作持续时间(秒)
     "base_window_size": (1600, 900),   # 基准窗口尺寸（宽, 高）
-    "drag_adjust_h": 1,                # 水平方向每增加160像素，拖拽距离减少的像素数
-    "drag_adjust_v": 2,                # 竖直方向每增加90像素，拖拽距离减少的像素数
     "output_folder": os.path.join(get_base_path(), "screenshots"),  # 截图输出目录
+    "output_format": "JPG",            # 输出格式（PNG或JPG）
 }
 
 SCROLL_MODES = {"全名最小字": {"scroll_count": 0}, "全名最大字": {"scroll_count": 5}, "单字最小字": {"scroll_count": 6}}
@@ -52,47 +65,37 @@ SCROLL_MODES = {"全名最小字": {"scroll_count": 0}, "全名最大字": {"scr
 REGION_CONFIG = {
     "武陵-武陵城": {
         "16:9": {
-            "全名最小字": {"grid": (15, 9), "overlap_x": 0.09, "overlap_y": 0.01, "drag": (825, 520)},
-            "全名最大字": {"grid": (8, 4), "overlap_x": 0.001, "overlap_y": 0.105, "drag": (1230, 640)},
-            "单字最小字": {"grid": (7, 4), "overlap_x": 0.16, "overlap_y": 0.09, "drag": (1070, 675)},
+            "全名最小字": {"grid": (15, 9), "overlap_x": 0.09, "overlap_y": 0.01, "drag": (826, 523)},
+            "全名最大字": {"grid": (8, 4), "overlap_x": 0.001, "overlap_y": 0.105, "drag": (1232, 643)},
+            "单字最小字": {"grid": (7, 4), "overlap_x": 0.16, "overlap_y": 0.09, "drag": (1072, 676)},
         },
     },
     "武陵-景玉谷": {
         "16:9": {
-            "全名最小字": {"grid": (10, 6), "overlap_x": 0.001, "overlap_y": 0.01, "drag": (900, 520)},
-            "全名最大字": {"grid": (6, 3), "overlap_x": 0.105, "overlap_y": 0.165, "drag": (1100, 600)},
-            "单字最小字": {"grid": (5, 3), "overlap_x": 0.262, "overlap_y": 0.09, "drag": (940, 675)},
+            "全名最小字": {"grid": (10, 6), "overlap_x": 0.001, "overlap_y": 0.01, "drag": (903, 522)},
+            "全名最大字": {"grid": (6, 3), "overlap_x": 0.105, "overlap_y": 0.165, "drag": (1104, 599)},
+            "单字最小字": {"grid": (5, 3), "overlap_x": 0.262, "overlap_y": 0.09, "drag": (941, 676)},
         },
     },
     "谷地-枢纽区": {
         "16:9": {
-            "全名最小字": {"grid": (13, 8), "overlap_x": 0.06, "overlap_y": 0.01, "drag": (850, 520)},
-            "全名最大字": {"grid": (7, 4), "overlap_x": 0.147, "overlap_y": 0.06, "drag": (1050, 675)},
-            "单字最小字": {"grid": (7, 4), "overlap_x": 0.271, "overlap_y": 0.171, "drag": (930, 615)},
-        },
-    },
-    "谷地-供能高地": {
-        "16:9": {
-            "全名最小字": {"grid": (9, 5), "overlap_x": 0.001, "overlap_y": 0.008, "drag": (900, 520)},
-            "全名最大字": {"grid": (5, 3), "overlap_x": 0.325, "overlap_y": 0.15, "drag": (830, 610)},
-            "单字最小字": {"grid": (5, 2), "overlap_x": 0.03, "overlap_y": 0.23, "drag": (1239, 575)},
-        },
-    },
-    "谷地-谷地通道": {
-        "16:9": {
-            "全名最小字": {"grid": (9, 5), "overlap_x": 0.001, "overlap_y": 0.008, "drag": (900, 520)},
-            "全名最大字": {"grid": (5, 3), "overlap_x": 0.325, "overlap_y": 0.15, "drag": (830, 610)},
-            "单字最小字": {"grid": (5, 2), "overlap_x": 0.03, "overlap_y": 0.23, "drag": (1239, 575)},
-        },
-    },
-    "谷地-源石研究园": {
-        "16:9": {
-            "全名最小字": {"grid": (9, 5), "overlap_x": 0.001, "overlap_y": 0.008, "drag": (900, 520)},
-            "全名最大字": {"grid": (5, 3), "overlap_x": 0.325, "overlap_y": 0.15, "drag": (830, 610)},
-            "单字最小字": {"grid": (5, 2), "overlap_x": 0.03, "overlap_y": 0.23, "drag": (1239, 575)},
+            "全名最小字": {"grid": (13, 8), "overlap_x": 0.06, "overlap_y": 0.01, "drag": (851, 522)},
+            "全名最大字": {"grid": (7, 4), "overlap_x": 0.147, "overlap_y": 0.06, "drag": (1052, 676)},
+            "单字最小字": {"grid": (7, 4), "overlap_x": 0.271, "overlap_y": 0.171, "drag": (930, 616)},
         },
     },
 }
+
+_GUDI_COMMON_CONFIG = {
+    "16:9": {
+        "全名最小字": {"grid": (9, 5), "overlap_x": 0.001, "overlap_y": 0.008, "drag": (905, 524)},
+        "全名最大字": {"grid": (5, 3), "overlap_x": 0.325, "overlap_y": 0.15, "drag": (834, 612)},
+        "单字最小字": {"grid": (5, 2), "overlap_x": 0.007, "overlap_y": 0.23, "drag": (1270, 574)},
+    },
+}
+
+for _region in ["谷地-供能高地", "谷地-谷地通道", "谷地-源石研究园"]:
+    REGION_CONFIG[_region] = _GUDI_COMMON_CONFIG
 
 ASPECT_RATIOS = ["16:9", "自定义"]
 REGIONS = list(REGION_CONFIG.keys()) + ["自定义"]
@@ -161,7 +164,7 @@ class GameScreenshotTool:
             self.drag_distance = self._get_drag_distance(getattr(self, 'current_region', None))
 
     def get_grid_size(self, region_name):
-        if region_name == "自定义":
+        if region_name == "自定义" or self.aspect_ratio == "自定义":
             return None
         config = self._get_region_config(region_name)
         return config.get("grid") if config else None
@@ -217,7 +220,7 @@ class GameScreenshotTool:
         for i in range(scroll_count):
             if not self.is_running:
                 return
-            pyautogui.scroll(-120, x=center_x, y=center_y)
+            pyautogui.scroll(-SCROLL_STEP, x=center_x, y=center_y)
             time.sleep(0.15)
         
         time.sleep(0.5)
@@ -239,12 +242,18 @@ class GameScreenshotTool:
         self.log("滚轮滚动完成")
 
     def capture_center_region(self):
-        w, h = self.game_window.width, self.game_window.height
-        region_size = int(w * self.capture_region), int(h * self.capture_region)
-        offset_y = int(h * self.capture_offset_y)
+        win = self.game_window
+        client_w, client_h = get_client_rect(win._hWnd)
+        border_x = (win.width - client_w) // 2
+        border_y = win.height - client_h - border_x
+        client_left = win.left + border_x
+        client_top = win.top + border_y
+        
+        region_size = int(client_w * self.capture_region_x), int(client_h * self.capture_region_y)
+        offset_y = int(client_h * self.capture_offset_y)
         region_pos = (
-            self.game_window.left + (w - region_size[0]) // 2,
-            self.game_window.top + (h - region_size[1]) // 2 + offset_y,
+            client_left + (client_w - region_size[0]) // 2,
+            client_top + (client_h - region_size[1]) // 2 + offset_y,
         )
         return pyautogui.screenshot(region=(*region_pos, *region_size))
 
@@ -253,20 +262,23 @@ class GameScreenshotTool:
             return
         win, margin = self.game_window, self.drag_margin
         dx, dy = self.drag_distance
-        base_w, base_h = self.base_window_size
-        adjust_x = ((win.width - base_w) // 160) * self.drag_adjust_h
-        adjust_y = ((win.height - base_h) // 90) * self.drag_adjust_v
-        dx = max(1, dx - adjust_x)
-        dy = max(1, dy - adjust_y)
-        base_x, base_y = win.left + margin, win.top + margin
-        drag_x, drag_y = win.left + dx + margin, win.top + dy + margin
+        client_w, client_h = get_client_rect(win._hWnd)
+        border_x = (win.width - client_w) // 2
+        border_y = win.height - client_h - border_x
+        client_left = win.left + border_x
+        client_top = win.top + border_y
+        base_x = client_left + margin
+        base_y_h = client_top + client_h - margin
+        base_y_v = client_top + margin
+        drag_x = client_left + dx + margin
+        drag_y = client_top + dy + margin
         
         if direction == 'right':
-            start_x, start_y, end_x, end_y = drag_x, base_y, base_x, base_y
+            start_x, start_y, end_x, end_y = drag_x, base_y_h, base_x, base_y_h
         elif direction == 'left':
-            start_x, start_y, end_x, end_y = base_x, base_y, drag_x, base_y
+            start_x, start_y, end_x, end_y = base_x, base_y_h, drag_x, base_y_h
         else:
-            start_x, start_y, end_x, end_y = base_x, drag_y, base_x, base_y
+            start_x, start_y, end_x, end_y = base_x, drag_y, base_x, base_y_v
         
         pyautogui.moveTo(start_x, start_y, duration=0.1)
         time.sleep(self.rand_delay(0.05))
@@ -331,8 +343,12 @@ class GameScreenshotTool:
         os.makedirs(self.output_folder, exist_ok=True)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         mode_suffix = f"_{self.scroll_mode}" if self.scroll_mode != DEFAULT_SCROLL_MODE else ""
-        output_path = os.path.join(self.output_folder, f"stitched_{timestamp}{mode_suffix}.jpg")
-        result.save(output_path, 'JPEG', quality=95)
+        ext = self.output_format.lower()
+        output_path = os.path.join(self.output_folder, f"stitched_{timestamp}{mode_suffix}.{ext}")
+        if self.output_format == "PNG":
+            result.save(output_path, 'PNG')
+        else:
+            result.save(output_path, 'JPG', quality=95)
         self.log(f"拼接完成：{output_path}")
 
     def start_capture(self, region_name, rows=None, cols=None):
@@ -340,7 +356,8 @@ class GameScreenshotTool:
             return self.log("已在运行中")
         
         self.current_region = region_name
-        self.drag_distance = self._get_drag_distance(region_name)
+        if region_name != "自定义":
+            self.drag_distance = self._get_drag_distance(region_name)
         
         if region_name == "自定义":
             if rows and cols and rows > 0 and cols > 0:
@@ -391,19 +408,24 @@ class GameScreenshotTool:
         screenshot_img = self.capture_center_region()
         os.makedirs(self.output_folder, exist_ok=True)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        screenshot_path = os.path.join(self.output_folder, f"manual_{timestamp}.jpg")
-        screenshot_img.save(screenshot_path, 'JPEG', quality=95)
+        ext = self.output_format.lower()
+        screenshot_path = os.path.join(self.output_folder, f"manual_{timestamp}.{ext}")
+        if self.output_format == "PNG":
+            screenshot_img.save(screenshot_path, 'PNG')
+        else:
+            screenshot_img.save(screenshot_path, 'JPG', quality=95)
         self.log(f"已保存：{screenshot_path}")
 
 
 class ScreenshotGUI:
-    VERSION = "v1.1.0"
+    VERSION = "v2.0.0"
     AUTHOR = "b站@Taumata°"
     WINDOW_TITLE = "终末地截图工具"
     WINDOW_SIZE = "520x470"
     
     def __init__(self):
         self.root = tk.Tk()
+        self._setup_dpi_scaling()
         self.root.title(f"{self.WINDOW_TITLE}{self.VERSION} - {self.AUTHOR}")
         self.root.geometry(self.WINDOW_SIZE)
         self.root.resizable(False, False)
@@ -412,6 +434,19 @@ class ScreenshotGUI:
         self.tool = GameScreenshotTool(log_callback=self.append_log)
         self.setup_ui()
         self.setup_hotkeys()
+
+    def _setup_dpi_scaling(self):
+        try:
+            hwnd = ctypes.windll.user32.GetDesktopWindow()
+            dc = ctypes.windll.user32.GetDC(hwnd)
+            dpi = ctypes.windll.gdi32.GetDeviceCaps(dc, 88)
+            ctypes.windll.user32.ReleaseDC(hwnd, dc)
+            if dpi > 0:
+                divisor = 72 + (dpi - 96) * 17 / 24
+                scale = dpi / divisor
+                self.root.tk.call('tk', 'scaling', scale)
+        except Exception:
+            pass
 
     def setup_ui(self):
         main_frame = ttk.Frame(self.root, padding="10")
@@ -474,6 +509,15 @@ class ScreenshotGUI:
             )
             rb.pack(side=tk.LEFT, padx=10)
             self.scroll_mode_radios.append(rb)
+        
+        ttk.Label(center_frame, text="输出格式: ").pack(side=tk.LEFT, padx=(20, 0))
+        self.output_format_var = tk.StringVar(value=self.tool.output_format)
+        self.output_format_combo = ttk.Combobox(
+            center_frame, textvariable=self.output_format_var,
+            values=["PNG", "JPG"], state="readonly", width=5
+        )
+        self.output_format_combo.pack(side=tk.LEFT)
+        self.output_format_combo.bind("<<ComboboxSelected>>", self.on_output_format_change)
 
     def _setup_region_frame(self, parent):
         frame = ttk.LabelFrame(parent, text="截图区域", padding="5")
@@ -483,7 +527,7 @@ class ScreenshotGUI:
         self.region_var = tk.StringVar(value="武陵-武陵城")
         self.region_combo = ttk.Combobox(
             frame, textvariable=self.region_var,
-            values=REGIONS, state="readonly", width=20
+            values=REGIONS, state="readonly", width=12
         )
         self.region_combo.pack(side=tk.LEFT, padx=5)
         self.region_combo.bind("<<ComboboxSelected>>", self.on_region_change)
@@ -493,8 +537,10 @@ class ScreenshotGUI:
         ttk.Label(frame, text="列:").pack(side=tk.LEFT, padx=(5, 0))
         self.cols_entry = self._create_entry(frame, 4)
         
-        ttk.Label(frame, text="大小:").pack(side=tk.LEFT, padx=(10, 0))
-        self.capture_region_entry = self._create_entry(frame, 5)
+        ttk.Label(frame, text="宽:").pack(side=tk.LEFT, padx=(10, 0))
+        self.capture_region_x_entry = self._create_entry(frame, 5)
+        ttk.Label(frame, text="高:").pack(side=tk.LEFT, padx=(5, 0))
+        self.capture_region_y_entry = self._create_entry(frame, 5)
         ttk.Label(frame, text="%").pack(side=tk.LEFT)
         
         self.update_grid_display()
@@ -522,7 +568,7 @@ class ScreenshotGUI:
     def _setup_hint(self, parent):
         ttk.Label(
             parent,
-            text="打开游戏进入俯瞰批量选择模式使用，截图时请勿移动鼠标",
+            text="进入俯瞰批量选择模式，视野拉到最小并移到左上角使用，截图请勿移动鼠标",
             foreground="gray"
         ).pack(pady=1)
 
@@ -558,12 +604,15 @@ class ScreenshotGUI:
         self.update_overlap_display()
         self.update_grid_display()
 
+    def on_output_format_change(self, event=None):
+        self.tool.output_format = self.output_format_var.get()
+
     def on_aspect_ratio_change(self, event=None):
         aspect_ratio = self.aspect_ratio_var.get()
         is_custom = aspect_ratio == "自定义"
         state = tk.NORMAL if is_custom else tk.DISABLED
         
-        for entry in [self.drag_x_entry, self.drag_y_entry, self.overlap_x_entry, self.overlap_y_entry, self.capture_region_entry]:
+        for entry in [self.drag_x_entry, self.drag_y_entry, self.overlap_x_entry, self.overlap_y_entry, self.capture_region_x_entry, self.capture_region_y_entry]:
             entry.config(state=state)
         
         scroll_state = tk.DISABLED if is_custom else tk.NORMAL
@@ -580,7 +629,8 @@ class ScreenshotGUI:
             self._update_entry(self.drag_y_entry, dy, keep_editable=True)
             self._update_entry(self.overlap_x_entry, f"{overlap_x * 100:.1f}", keep_editable=True)
             self._update_entry(self.overlap_y_entry, f"{overlap_y * 100:.1f}", keep_editable=True)
-            self._update_entry(self.capture_region_entry, f"{self.tool.capture_region * 100:.1f}", keep_editable=True)
+            self._update_entry(self.capture_region_x_entry, f"{self.tool.capture_region_x * 100:.1f}", keep_editable=True)
+            self._update_entry(self.capture_region_y_entry, f"{self.tool.capture_region_y * 100:.1f}", keep_editable=True)
         else:
             self.tool.set_aspect_ratio(aspect_ratio)
             self.update_drag_display()
@@ -603,12 +653,11 @@ class ScreenshotGUI:
         self._update_entry(self.overlap_y_entry, f"{overlap_y * 100:.1f}")
 
     def update_capture_region_display(self):
-        self._update_entry(self.capture_region_entry, f"{self.tool.capture_region * 100:.1f}")
+        self._update_entry(self.capture_region_x_entry, f"{self.tool.capture_region_x * 100:.1f}")
+        self._update_entry(self.capture_region_y_entry, f"{self.tool.capture_region_y * 100:.1f}")
 
     def update_grid_display(self):
-        if not hasattr(self, 'region_var'):
-            return
-        grid_size = self.tool.get_grid_size(self.region_var.get())
+        grid_size = self.tool.get_grid_size(self._get_current_region())
         if grid_size:
             self._update_entry(self.rows_entry, grid_size[0])
             self._update_entry(self.cols_entry, grid_size[1])
@@ -638,11 +687,13 @@ class ScreenshotGUI:
             self.tool.custom_overlap_x = overlap_x / 100
             self.tool.custom_overlap_y = overlap_y / 100
             
-            capture_region = float(self.capture_region_entry.get())
-            if not (0 < capture_region < 100):
+            capture_region_x = float(self.capture_region_x_entry.get())
+            capture_region_y = float(self.capture_region_y_entry.get())
+            if not (0 < capture_region_x < 100 and 0 < capture_region_y < 100):
                 messagebox.showerror("错误", "截图区域比例必须在0到100之间")
                 return False
-            self.tool.capture_region = capture_region / 100
+            self.tool.capture_region_x = capture_region_x / 100
+            self.tool.capture_region_y = capture_region_y / 100
             return True
         except ValueError:
             messagebox.showerror("错误", "请输入有效的数值")
