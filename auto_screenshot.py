@@ -57,7 +57,7 @@ CONFIG = {
     "drag_duration": 0.01,             # 拖拽动作持续时间(秒)
     "base_window_size": (1600, 900),   # 基准窗口尺寸（宽, 高）
     "output_folder": os.path.join(get_base_path(), "screenshots"),  # 截图输出目录
-    "output_format": "JPG",            # 输出格式（PNG或JPG）
+    "output_format": "PNG",            # 输出格式（PNG或JPEG）
 }
 
 SCROLL_MODES = {"全名最小字": {"scroll_count": 0}, "全名最大字": {"scroll_count": 5}, "单字最小字": {"scroll_count": 6}}
@@ -348,7 +348,7 @@ class GameScreenshotTool:
         if self.output_format == "PNG":
             result.save(output_path, 'PNG')
         else:
-            result.save(output_path, 'JPG', quality=95)
+            result.save(output_path, 'JPEG', quality=95)
         self.log(f"拼接完成：{output_path}")
 
     def start_capture(self, region_name, rows=None, cols=None):
@@ -413,7 +413,7 @@ class GameScreenshotTool:
         if self.output_format == "PNG":
             screenshot_img.save(screenshot_path, 'PNG')
         else:
-            screenshot_img.save(screenshot_path, 'JPG', quality=95)
+            screenshot_img.save(screenshot_path, 'JPEG', quality=95)
         self.log(f"已保存：{screenshot_path}")
 
 
@@ -514,7 +514,7 @@ class ScreenshotGUI:
         self.output_format_var = tk.StringVar(value=self.tool.output_format)
         self.output_format_combo = ttk.Combobox(
             center_frame, textvariable=self.output_format_var,
-            values=["PNG", "JPG"], state="readonly", width=5
+            values=["PNG", "JPEG"], state="readonly", width=5
         )
         self.output_format_combo.pack(side=tk.LEFT)
         self.output_format_combo.bind("<<ComboboxSelected>>", self.on_output_format_change)
